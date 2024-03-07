@@ -1,0 +1,14 @@
+---
+- name: Extract AIDE report entries
+  hosts: all
+  tasks:
+    - name: Run AIDE parsing command
+      ansible.builtin.shell: |
+        awk '/^Added Entries:$/,/^Removed Entries:$/{if (!/^Added Entries:$|Removed Entries:$/) print "Added: "$0}
+             /^Removed Entries:$/,/^Changed Entries:$/{if (!/^Removed Entries:$|^Changed Entries:$/) print "Removed: "$0}
+             /^Changed Entries:$/,/^$/ {if (!/^Changed Entries:$|^$/ && $0 !~ /^Detailed information about changes:/) print "Changed: "$0}' /path/to/aide_report.txt
+      register: aide_output
+
+    - name: Display AIDE parsing results
+      ansible.builtin.debug:
+        msg: "{{ aide_output.stdout_lines }}"
