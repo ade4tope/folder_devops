@@ -12,3 +12,39 @@
     - name: Display AIDE parsing results
       ansible.builtin.debug:
         msg: "{{ aide_output.stdout_lines }}"
+- name: Run AIDE check on 5 servers
+  hosts: all
+  tasks:
+    - name: Run AIDE check
+      command: aide --check
+
+- name: Gather and extract AIDE report values
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Gather AIDE report
+      shell: cat /var/log/aide/aide.log
+      register: aide_report
+
+    - name: Extract f+ and f- values
+      set_fact:
+        f_plus_values: "{{ aide_report.stdout | regex_findall('f\\+{4}:\\s+(\\S+)') }}"
+        f_minus_values: "{{ aide_report.stdout | regex_findall('f-{4}:\\s+(\\S+)') }}"
+
+- name: Compare results and print common values
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Compare values across servers
+      set_fact:
+        common_values: "{{ f_plus_values | intersect(f_minus_values) }}"
+
+    - name: Print common values
+      debug:
+        msg: "Common values across servers: {{ common_values }}"
+      when: common_values | length > 0
+
+  handlers:
+    - name: restart_service
+      debug:
+        msg: "Some values are common across the servers!"
