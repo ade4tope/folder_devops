@@ -48,3 +48,26 @@
     - name: restart_service
       debug:
         msg: "Some values are common across the servers!"
+
+- name: Set custom variables on target hosts
+  hosts: targets
+  tasks:
+    - name: Example of setting a custom fact on each host
+      set_fact:
+        custom_variable: "Value from {{ inventory_hostname }}"
+
+- name: Aggregate custom variables on the dedicated host
+  hosts: dedicated
+  tasks:
+    - name: Initialize an empty list for our aggregated variables
+      set_fact:
+        aggregated_variables: []
+
+    - name: Gather custom variables from each target host
+      set_fact:
+        aggregated_variables: "{{ aggregated_variables + [hostvars[item].custom_variable] }}"
+      loop: "{{ groups['targets'] }}"
+
+    - name: Display the aggregated variables
+      debug:
+        msg: "Aggregated Variables: {{ aggregated_variables }}"
