@@ -71,3 +71,38 @@
     - name: Display the aggregated variables
       debug:
         msg: "Aggregated Variables: {{ aggregated_variables }}"
+
+
+- name: Run AIDE check on 5 servers
+  hosts: all
+  tasks:
+    - name: Run AIDE check
+      command: aide --check
+
+- name: Gather AIDE report and extract f+ values
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Gather AIDE report
+      shell: cat /var/log/aide/aide.log
+      register: aide_report
+
+    - name: Extract f+ values
+      set_fact:
+        f_plus_values: "{{ aide_report.stdout | regex_findall('f\\+{4}:\\s+(\\S+)') }}"
+
+- name: Compare f+ values across servers
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Aggregate f+ values
+      set_fact:
+        f_plus_values_all: "{{ f_plus_values_all | default([]) + f_plus_values }}"
+
+    - name: Find common f+ values
+      set_fact:
+        common_f_plus_values: "{{ f_plus_values_all | groupby('identity') | selectattr('results|length', '==', 5) | map(attribute='identity') | list }}"
+
+- name: Print common f+ values
+  debug:
+    msg: "Common f+ values across servers: {{ common_f_plus_values }}"
