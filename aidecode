@@ -121,3 +121,40 @@
         msg: "Duplicate path {{ item }} found {{ paths | select('equalto', item) | list | count }} times"
       loop: "{{ paths | unique }}"
       when: "{{ paths | select('equalto', item) | list | count }} > 1"
+
+
+- hosts: localhost
+  vars:
+    paths:
+      - /path/to/file1
+      - /path/to/file2
+      - /path/to/file1
+      - /path/to/file3
+    smtp_server: smtp.example.com
+    smtp_port: 25
+    smtp_username: your_username
+    smtp_password: your_password
+    sender_email: sender@example.com
+    recipient_email: recipient@example.com
+
+  tasks:
+    - name: Find duplicate paths
+      set_fact:
+        duplicate_paths: "{{ duplicate_paths | default([]) + [item] }}"
+      loop: "{{ paths | unique }}"
+      when: "{{ paths | select('equalto', item) | list | count }} > 1"
+
+    - name: Send email with duplicate paths
+      mail:
+        host: "{{ smtp_server }}"
+        port: "{{ smtp_port }}"
+        username: "{{ smtp_username }}"
+        password: "{{ smtp_password }}"
+        from: "{{ sender_email }}"
+        to: "{{ recipient_email }}"
+        subject: "Duplicate Paths Found"
+        body: |
+          The following paths were found duplicated:
+          {% for path in duplicate_paths %}
+          - {{ path }}
+          {% endfor %}
