@@ -106,3 +106,18 @@
 - name: Print common f+ values
   debug:
     msg: "Common f+ values across servers: {{ common_f_plus_values }}"
+
+- hosts: localhost
+  vars:
+    paths:
+      - /path/to/file1
+      - /path/to/file2
+      - /path/to/file1
+      - /path/to/file3
+
+  tasks:
+    - name: Find duplicate paths
+      debug:
+        msg: "Duplicate path {{ item }} found {{ paths | select('equalto', item) | list | count }} times"
+      loop: "{{ paths | unique }}"
+      when: "{{ paths | select('equalto', item) | list | count }} > 1"
