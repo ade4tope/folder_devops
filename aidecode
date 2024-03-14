@@ -158,3 +158,55 @@
           {% for path in duplicate_paths %}
           - {{ path }}
           {% endfor %}
+
+
+
+
+---
+- name: Identify and write out duplicates
+  hosts: localhost
+  vars:
+    paths_to_search:
+      - "/path/to/search1"
+      - "/path/to/search2"
+    output_file: "/path/to/duplicate_files.txt"
+  tasks:
+    - name: Find files in specified paths
+      find:
+        paths: "{{ item }}"
+        file_type: file
+      register: found_files
+      loop: "{{ paths_to_search }}"
+      # If you are checking in a lot of directories, consider adding 'ignore_errors: yes'
+
+    - name: Calculate checksums for each file
+      shell: "sha1sum {{ item.path }} | awk '{print $1}'"
+      register: checksums
+      loop: "{{ found_files.results | map(attribute='files') | flatten }}"
+      loop_control:
+        label: "{{ item.path }}"
+      changed_when: False
+
+    - name: Pair each file with its checksum
+      set_fact:
+        files_with_checksums: "{{ files_with_checksums | default([]) + [{ 'path': item.item.path, 'checksum': item.stdout }] }}"
+      loop: "{{ checksums.results }}"
+      loop_control:
+        label: "{{ item.item.path }}"
+
+    - name: Find duplicates based on checksum
+      set_fact:
+        duplicates: "{{ duplicates | default([]) + [item] }}"
+      loop: "{{ files_with_checksums }}"
+      when: files_with_checksums | selectattr('checksum','equalto',item.checksum) | list | length > 1
+      loop_control:
+        label: "{{ item.path }}"
+
+    - name: Write out duplicates to a file
+      copy:
+        content: |
+          {% for file in duplicates %}
+          {{ file.path }}
+          {% endfor %}
+        dest: "{{ output_file }}"
+      when: duplicates | length > 0
