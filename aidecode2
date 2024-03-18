@@ -1,0 +1,31 @@
+---
+- name: Find duplicate filenames and write them out
+  hosts: localhost
+  vars:
+    paths_to_search:
+      - "/path/to/search1"
+      - "/path/to/search2"
+    output_file: "/path/to/duplicate_filenames.txt"
+  tasks:
+    - name: Find all files in the specified paths
+      find:
+        paths: "{{ item }}"
+        recurse: yes  # Set to no if you do not want to search subdirectories
+      register: found_files
+      loop: "{{ paths_to_search }}"
+
+    - name: Extract file names and paths
+      set_fact:
+        files_list: "{{ found_files.results | map(attribute='files') | flatten | map(attribute='path') }}"
+
+    - name: Identify duplicate file names
+      set_fact:
+        duplicates: "{{ files_list | map('basename') | groupby('identity') | selectattr('1', 'length', '>', 1) | map('first') }}"
+
+    - name: Write out duplicates to a file
+      lineinfile:
+        path: "{{ output_file }}"
+        line: "{{ item }}"
+        create: yes
+      loop: "{{ duplicates }}"
+      when: duplicates | length > 0
