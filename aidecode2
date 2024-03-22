@@ -29,3 +29,24 @@
         create: yes
       loop: "{{ duplicates }}"
       when: duplicates | length > 0
+
+
+#!/bin/bash
+
+# Define your list
+list=("apple" "banana" "apple" "orange" "banana" "grape" "apple")
+
+# Create an associative array to store counts of each element
+declare -A counts
+
+# Loop through the list and count occurrences of each element
+for item in "${list[@]}"; do
+    (( counts[$item]++ ))
+done
+
+# Loop through the counts and print duplicates
+for item in "${!counts[@]}"; do
+    if (( counts[$item] > 1 )); then
+        echo "$item is duplicated ${counts[$item]} times"
+    fi
+done
