@@ -1,0 +1,24 @@
+source "qemu" "rhel9" {
+  iso_url           = "path/to/rhel9.iso"
+  iso_checksum      = "checksum_of_rhel9_iso"
+  ssh_username      = "user"
+  ssh_password      = "password"
+  shutdown_command  = "sudo shutdown -h now"
+  boot_wait         = "10s"
+  disk_size         = "10000"
+  headless          = true
+  http_directory    = "http"
+  qemuargs = [
+    "-m", "2048",
+    "-smp", "2"
+  ]
+  boot_command = [
+    "<wait5>",
+    "<esc>",
+    "linux text inst.ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg inst.repo=http://path/to/rhel9-repo",
+    "inst.language=en_US",
+    "inst.keymap=us",
+    "inst.ks.sendmac",
+    "<enter>"
+  ]
+}
