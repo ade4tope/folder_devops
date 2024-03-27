@@ -22,3 +22,26 @@ source "qemu" "rhel9" {
     "<enter>"
   ]
 }
+
+
+source "qemu" "rhel9" {
+  iso_url             = "path/to/rhel9.iso"
+  iso_checksum        = "sha256:checksum"
+  iso_checksum_type   = "sha256"
+  disk_size           = "20000"
+  headless            = true
+  boot_command = [
+    "<wait10>",
+    "<tab><wait>",
+    "inst.text inst.ks=http://path/to/kickstart.cfg<enter>"
+  ]
+}
+
+build {
+  sources = ["source.qemu.rhel9"]
+  provisioner "shell" {
+    inline = [
+      "echo 'Hello, World!'"
+    ]
+  }
+}
