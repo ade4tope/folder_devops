@@ -50,3 +50,28 @@ for item in "${!counts[@]}"; do
         echo "$item is duplicated ${counts[$item]} times"
     fi
 done
+
+
+---
+- name: Find elements appearing more than twice
+  hosts: localhost
+  gather_facts: no
+  vars:
+    my_list:
+      - apple
+      - banana
+      - apple
+      - orange
+      - banana
+      - grape
+
+  tasks:
+    - name: Create count_map dictionary
+      set_fact:
+        count_map: "{{ count_map | default({}) | combine({item: (count_map[item] | default(0)) + 1}) }}"
+      loop: "{{ my_list }}"
+
+    - name: Print elements appearing more than twice
+      debug:
+        msg: "Element {{ item }} appears more than twice"
+      loop: "{{ count_map.keys() | select('dict2items', 'value > 2') | map(attribute='key') | list }}"
