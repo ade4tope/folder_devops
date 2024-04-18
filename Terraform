@@ -1,0 +1,38 @@
+provider "vsphere" {
+    # Configure the vSphere provider
+    user           = "username"
+    password       = "password"
+    vsphere_server = "vcenter_server"
+    # Optionally, set `insecure = true` if SSL verification is not required
+}
+
+resource "vsphere_virtual_machine" "vm" {
+    name            = "my-vm"
+    resource_pool_id = "resource_pool_id"
+    datastore_id    = "datastore_id"
+    folder          = "vm_folder"
+    num_cpus        = 2
+    memory          = 2048
+
+    # Use the Packer template
+    guest_id        = "guest_os_id"
+    source {
+        template_uuid = "packer_template_uuid"
+    }
+
+    # Add an additional disk
+    disk {
+        label            = "additional_disk"
+        unit_number      = 2  # Specify the unit number for the new disk
+        size             = 10  # Size of the new disk in GB
+        eagerly_scrub    = false
+        thin_provisioned = true
+    }
+
+    # Define network interfaces as needed
+    network_interface {
+        network_id = "network_id"
+    }
+
+    # Other VM configurations...
+}
