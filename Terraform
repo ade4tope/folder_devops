@@ -36,3 +36,95 @@ resource "vsphere_virtual_machine" "vm" {
 
     # Other VM configurations...
 }
+
+
+
+
+
+provider "vsphere" {
+  user                 = var.vsphere_user
+  password             = var.vsphere_password
+  vsphere_server       = var.vsphere_server
+  allow_unverified_ssl = true
+}
+
+resource "vsphere_virtual_machine" "example" {
+  name             = var.vm_name
+  resource_pool_id = var.resource_pool_id
+  datastore_id     = var.datastore_id
+
+  dynamic "disk" {
+    for_each = var.additional_disks
+
+    content {
+      label            = disk.value.label
+      size             = disk.value.size_gb
+      eagerly_scrub    = var.eagerly_scrub
+      thin_provisioned = var.thin_provisioned
+    }
+  }
+}
+
+variable "additional_disks" {
+  type = list(object({
+    label   = string
+    size_gb = number
+  }))
+  default = [
+    { label = "Disk1", size_gb = 100 },
+    { label = "Disk2", size_gb = 200 },
+    # Add more disks as needed
+  ]
+}
+
+To create disks dynamically within a Terraform configuration for vSphere, you can use the `dynamic` block along with the `count` parameter. Here's how you can implement it:
+
+```hcl
+provider "vsphere" {
+  user                 = var.vsphere_user
+  password             = var.vsphere_password
+  vsphere_server       = var.vsphere_server
+  allow_unverified_ssl = true
+}
+
+resource "vsphere_virtual_machine" "example" {
+  name             = var.vm_name
+  resource_pool_id = var.resource_pool_id
+  datastore_id     = var.datastore_id
+
+  dynamic "disk" {
+    for_each = var.additional_disks
+
+    content {
+      label            = disk.value.label
+      size             = disk.value.size_gb
+      eagerly_scrub    = var.eagerly_scrub
+      thin_provisioned = var.thin_provisioned
+    }
+  }
+}
+```
+
+In this example:
+
+- We use a `dynamic` block to iterate over a list of additional disks defined by the variable `var.additional_disks`.
+- For each disk in the list, it creates a disk with the specified properties such as label, size, and provisioning type (`thin_provisioned`).
+- Adjust the structure of `var.additional_disks` to include labels and sizes for each additional disk you want to create.
+
+Your `var.additional_disks` variable could look something like this:
+
+```hcl
+variable "additional_disks" {
+  type = list(object({
+    label   = string
+    size_gb = number
+  }))
+  default = [
+    { label = "Disk1", size_gb = 100 },
+    { label = "Disk2", size_gb = 200 },
+    # Add more disks as needed
+  ]
+}
+```
+
+This way, you can dynamically create disks based on the contents of the `additional_disks` list. Adjust the disk labels, sizes, and other properties as needed.
