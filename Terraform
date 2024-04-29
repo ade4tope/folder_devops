@@ -128,3 +128,67 @@ variable "additional_disks" {
 ```
 
 This way, you can dynamically create disks based on the contents of the `additional_disks` list. Adjust the disk labels, sizes, and other properties as needed.
+
+
+
+
+
+Certainly! Below is an example Terraform configuration to dynamically create additional disks for a virtual machine in vSphere:
+
+```hcl
+provider "vsphere" {
+  user           = "your_username"
+  password       = "your_password"
+  vsphere_server = "your_vsphere_server"
+}
+
+variable "vm_name" {
+  description = "Name of the virtual machine"
+  type        = string
+}
+
+variable "disk_count" {
+  description = "Number of additional disks to create"
+  type        = number
+}
+
+variable "disk_size_gb" {
+  description = "Size of each additional disk in gigabytes"
+  type        = number
+}
+
+resource "vsphere_virtual_machine" "vm" {
+  name             = var.vm_name
+  resource_pool_id = "your_resource_pool_id"
+  datastore_id     = "your_datastore_id"
+  num_cpus         = 2
+  memory           = 4096
+
+  disk {
+    label            = "${var.vm_name}_disk1"
+    size             = 20
+    eagerly_scrub    = false
+    thin_provisioned = true
+  }
+
+  dynamic "disk" {
+    for_each = range(var.disk_count)
+    content {
+      label            = "${var.vm_name}_disk${disk.key + 2}"
+      size             = var.disk_size_gb
+      eagerly_scrub    = false
+      thin_provisioned = true
+    }
+  }
+}
+```
+
+In this Terraform configuration:
+
+- Replace `"your_username"`, `"your_password"`, and `"your_vsphere_server"` with your vSphere credentials and server address.
+- Replace `"your_resource_pool_id"` and `"your_datastore_id"` with the appropriate IDs for your vSphere environment. You can find these IDs by querying vSphere or by inspecting the Terraform state after running a plan or apply.
+- Adjust the values for `num_cpus` and `memory` according to your requirements.
+- The first disk is defined outside of the `dynamic` block with a fixed size of 20GB.
+- Additional disks are dynamically created inside the `dynamic` block based on the value of the `disk_count` variable, each with a size specified by the `disk_size_gb` variable.
+
+Make sure you have the necessary permissions and prerequisites configured in your vSphere environment for Terraform to interact with it. Additionally, always test your Terraform configurations in a non-production environment before applying them to production.
