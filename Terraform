@@ -192,3 +192,64 @@ In this Terraform configuration:
 - Additional disks are dynamically created inside the `dynamic` block based on the value of the `disk_count` variable, each with a size specified by the `disk_size_gb` variable.
 
 Make sure you have the necessary permissions and prerequisites configured in your vSphere environment for Terraform to interact with it. Additionally, always test your Terraform configurations in a non-production environment before applying them to production.
+
+
+
+
+provider "vsphere" {
+  user           = "your_username"
+  password       = "your_password"
+  vsphere_server = "your_vsphere_server"
+}
+
+variable "vm_name" {
+  description = "Name of the virtual machine"
+  type        = string
+}
+
+variable "vm_template" {
+  description = "Name of the VM template to use"
+  type        = string
+}
+
+variable "datastore" {
+  description = "Name of the datastore"
+  type        = string
+}
+
+variable "network" {
+  description = "Name of the network"
+  type        = string
+}
+
+variable "ipv4_address" {
+  description = "IPv4 address for the VM"
+  type        = string
+}
+
+variable "ipv4_netmask" {
+  description = "IPv4 netmask for the VM"
+  type        = string
+}
+
+resource "vsphere_virtual_machine" "vm" {
+  name             = var.vm_name
+  resource_pool_id = "your_resource_pool_id"
+  datastore_id     = "your_datastore_id"
+  template_name    = var.vm_template
+
+  network_interface {
+    network_id   = data.vsphere_network.network.id
+    adapter_type = "vmxnet3"
+    ipv4_address = var.ipv4_address
+    ipv4_netmask = var.ipv4_netmask
+  }
+}
+
+data "vsphere_network" "network" {
+  name = var.network
+}
+
+data "vsphere_datastore" "datastore" {
+  name = var.datastore
+}
