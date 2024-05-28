@@ -27,3 +27,41 @@
         name: "{{ package_list['packages'] }}"
         state: present
       when: package_list is defined
+
+
+# playbook.yml
+---
+- name: Install packages based on OS version
+  hosts: all
+  vars_files:
+    - vars/packages.yml
+    - vars/rhel8.yml
+    - vars/rhel9.yml
+  tasks:
+    - name: Gather facts
+      ansible.builtin.setup:
+        gather_subset:
+          - os_family
+          - distribution_major_version
+
+    - name: Set RHEL 8 specific packages
+      set_fact:
+        os_specific_packages: "{{ rhel8_packages }}"
+      when: ansible_distribution_major_version == '8'
+
+    - name: Set RHEL 9 specific packages
+      set_fact:
+        os_specific_packages: "{{ rhel9_packages }}"
+      when: ansible_distribution_major_version == '9'
+
+    - name: Combine common and OS specific packages
+      set_fact:
+        all_packages: "{{ common_packages + os_specific_packages }}"
+
+    - name: Install all packages
+      ansible.builtin.yum:
+        name: "{{ all_packages }}"
+        state: present
+
+
+
