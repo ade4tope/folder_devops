@@ -1,0 +1,29 @@
+# playbook.yml
+---
+- name: Install packages based on OS version
+  hosts: all
+  vars_files:
+    - vars/rhel8.yml
+    - vars/rhel9.yml
+  tasks:
+    - name: Gather facts
+      ansible.builtin.setup:
+        gather_subset:
+          - os_family
+          - distribution_major_version
+
+    - name: Set package list for RHEL 8
+      set_fact:
+        package_list: "{{ lookup('file', 'vars/rhel8.yml') | from_yaml }}"
+      when: ansible_distribution_major_version == '8'
+
+    - name: Set package list for RHEL 9
+      set_fact:
+        package_list: "{{ lookup('file', 'vars/rhel9.yml') | from_yaml }}"
+      when: ansible_distribution_major_version == '9'
+
+    - name: Install packages
+      ansible.builtin.yum:
+        name: "{{ package_list['packages'] }}"
+        state: present
+      when: package_list is defined
