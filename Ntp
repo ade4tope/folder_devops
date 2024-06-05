@@ -1,0 +1,157 @@
+---
+- name: Report NTP skew
+  hosts: all
+  vars:
+    report_file: /tmp/last_report_times.json
+
+  tasks:
+    - name: Ensure the report file exists
+      ansible.builtin.file:
+        path: "{{ report_file }}"
+        state: touch
+
+    - name: Read the report file
+      slurp:
+        src: "{{ report_file }}"
+      register: report_file_content
+
+    - name: Set report times variable
+      set_fact:
+        report_times: "{{ report_file_content.content | b64decode | from_json if report_file_content.content | length > 0 else {} }}"
+
+    - name: Check NTP skew
+      shell: ntpdate -q pool.ntp.org | grep offset | awk '{print $10}'
+      register: ntp_skew
+
+    - name: Report NTP skew if above threshold and delay time passed
+      block:
+        - name: Check if host has reported recently
+          set_fact:
+            last_report_time: "{{ report_times[inventory_hostname] | default(0) }}"
+
+        - name: Calculate time difference
+          set_fact:
+            time_diff: "{{ (ansible_date_time.epoch | int) - last_report_time }}"
+
+        - name: Report if skew is above threshold and delay has passed
+          when: ntp_skew.stdout | float > 0.5 and time_diff >= 300
+          block:
+            - name: Send email report
+              mail:
+                to: "recipient@example.com"
+                subject: "NTP Skew Alert for {{ inventory_hostname }}"
+                body: "Host {{ inventory_hostname }} has an NTP skew of {{ ntp_skew.stdout }} seconds."
+
+            - name: Update the report times
+              set_fact:
+                report_times_updated: "{{ report_times | combine({ inventory_hostname: ansible_date_time.epoch | int }) }}"
+
+            - name: Write updated report times to file
+              copy:
+                dest: "{{ report_file }}"
+                content: "{{ report_times_updated | to_nice_json }}"
+      when: ntp_skew.stdout | float > 0.5
+
+    - name: Report if skew is below threshold and delay has passed
+      block:
+        - name: Check if host has reported recently
+          set_fact:
+            last_report_time: "{{ report_times[inventory_hostname] | default(0) }}"
+
+        - name: Calculate time difference
+          set_fact:
+            time_diff: "{{ (ansible_date_time.epoch | int) - last_report_time }}"
+
+        - name: Report if skew is below threshold and delay has passed
+          when: ntp_skew.stdout | float < 0.5 and time_diff >= 300
+          block:
+            - name: Send email report
+              mail:
+                to: "recipient@example.com"
+                subject: "NTP Skew Alert for {{ inventory_hostname }}"
+                body: "Host {{ inventory_hostname }} has an NTP skew of {{ ntp_skew.stdout }} seconds."
+
+            - name: Update the report times
+              set_fact:
+                report_times_updated: "{{ report_times | combine({ inventory_hostname: ansible_date_time.epoch | int }) }}"
+
+            - name: Write updated report times to file
+              copy:
+                dest: "{{ report_file }}"
+                content: "{{ report_times_updated | to_nice_json }}"
+      when: ntp_skew.stdout | float < 0.5
+
+
+
+
+
+---
+- name: Report NTP skew against central domain controller
+  hosts: all
+  vars:
+    report_file: /tmp/last_report_times.json
+    domain_controller: "dc.example.com"
+
+  tasks:
+    - name: Ensure the report file exists
+      ansible.builtin.file:
+        path: "{{ report_file }}"
+        state: touch
+
+    - name: Read the report file
+      slurp:
+        src: "{{ report_file }}"
+      register: report_file_content
+
+    - name: Set report times variable
+      set_fact:
+        report_times: "{{ report_file_content.content | b64decode | from_json if report_file_content.content | length > 0 else {} }}"
+
+    - name: Check NTP skew
+      shell: ntpdate -q {{ domain_controller }} | grep offset | awk '{print $10}'
+      register: ntp_skew
+
+    - name: Check if host has reported recently
+      set_fact:
+        last_report_time: "{{ report_times[inventory_hostname] | default(0) }}"
+
+    - name: Calculate time difference
+      set_fact:
+        time_diff: "{{ (ansible_date_time.epoch | int) - last_report_time }}"
+
+    - name: Report if skew is above threshold and delay has passed
+      when: ntp_skew.stdout | float > 0.5 and time_diff >= 300
+      block:
+        - name: Send email report
+          mail:
+            to: "recipient@example.com"
+            subject: "NTP Skew Alert for {{ ansible_host }}"
+            body: "Host {{ ansible_host }} (IP: {{ inventory_hostname }}) has an NTP skew of {{ ntp_skew.stdout }} seconds."
+
+        - name: Update the report times
+          set_fact:
+            report_times_updated: "{{ report_times | combine({ inventory_hostname: ansible_date_time.epoch | int }) }}"
+
+        - name: Write updated report times to file
+          copy:
+            dest: "{{ report_file }}"
+            content: "{{ report_times_updated | to_nice_json }}"
+
+    - name: Report if skew is below threshold and delay has passed
+      when: ntp_skew.stdout | float < 0.5 and time_diff >= 300
+      block:
+        - name: Send email report
+          mail:
+            to: "recipient@example.com"
+            subject: "NTP Skew Alert for {{ ansible_host }}"
+            body: "Host {{ ansible_host }} (IP: {{ inventory_hostname }}) has an NTP skew of {{ ntp_skew.stdout }} seconds."
+
+        - name: Update the report times
+          set_fact:
+            report_times_updated: "{{ report_times | combine({ inventory_hostname: ansible_date_time.epoch | int }) }}"
+
+        - name: Write updated report times to file
+          copy:
+            dest: "{{ report_file }}"
+            content: "{{ report_times_updated | to_nice_json }}"
+
