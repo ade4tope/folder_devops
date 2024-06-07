@@ -155,3 +155,107 @@
             dest: "{{ report_file }}"
             content: "{{ report_times_updated | to_nice_json }}"
 
+
+
+
+
+---
+- name: Check NTP time skew and send report
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: Install ntpdate if not present
+      ansible.builtin.yum:
+        name: ntpdate
+        state: present
+      become: yes
+
+    - name: Query NTP time skew against the domain controller
+      ansible.builtin.command:
+        cmd: ntpdate -q your.domain.controller | grep -oP '(?<=offset )[-0-9.]+'
+      register: ntp_skew
+      changed_when: false
+
+    - name: Set fact for time skew
+      ansible.builtin.set_fact:
+        time_skew: "{{ ntp_skew.stdout }}"
+
+    - name: Add host and its time skew to the list
+      ansible.builtin.set_fact:
+        host_skew_list: "{{ host_skew_list | default([]) + [{'host': inventory_hostname, 'skew': time_skew|float }] }}"
+
+- name: Generate and send email report
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Filter time skews greater or less than 0.5 seconds
+      ansible.builtin.set_fact:
+        filtered_host_skew_list: "{{ host_skew_list | selectattr('skew', 'search', '^(?:(?!^-?0?\.[0-4]\d*$).)*$') | list }}"
+
+    - name: Create HTML report
+      ansible.builtin.template:
+        src: ntp_report_template.j2
+        dest: /tmp/ntp_report.html
+      vars:
+        host_skew_list: "{{ filtered_host_skew_list }}"
+
+    - name: Load previous email sent times
+      ansible.builtin.slurp:
+        path: /etc/ansible/facts.d/ntp_email_sent_times.json
+      register: previous_email_sent_times
+      ignore_errors: yes
+
+    - name: Decode previous email sent times
+      ansible.builtin.set_fact:
+        email_sent_times: "{{ previous_email_sent_times['content'] | b64decode | from_json }}"
+      when: previous_email_sent_times is defined and previous_email_sent_times['content'] is defined
+
+    - name: Initialize email sent times if not present
+      ansible.builtin.set_fact:
+        email_sent_times: {}
+
+    - name: Set current time
+      ansible.builtin.set_fact:
+        current_time: "{{ ansible_date_time.epoch | int }}"
+
+    - name: Filter hosts that need email notifications
+      ansible.builtin.set_fact:
+        hosts_to_notify: >-
+          {{ filtered_host_skew_list | selectattr('host', 'in', email_sent_times.keys() | map('regex_replace', '^(.*)$', '\1') | list) |
+          selectattr('skew', 'search', '^(?:(?!^-?0?\.[0-4]\d*$).)*$') |
+          selectattr('host', 'regex_replace', '^(.*)$', '\1') | selectattr('host', 'defined') | list }}
+
+    - name: Send email with HTML report if there are any time skews outside the 0.5s range
+      community.general.mail:
+        host: smtp.your.mailserver.com
+        port: 587
+        username: your_username
+        password: your_password
+        to: recipient@example.com
+        subject: "NTP Time Skew Report"
+        body: "Please find the attached NTP time skew report."
+        subtype: html
+        attach:
+          - /tmp/ntp_report.html
+      when: hosts_to_notify | length > 0
+
+    - name: Update email sent times
+      ansible.builtin.set_fact:
+        new_email_sent_times: >-
+          {{
+            email_sent_times | combine(
+              hosts_to_notify | items2dict(
+                key_name='host',
+                value_name='skew'
+              ) | map(
+                'combine',
+                { 'timestamp': current_time }
+              ) | list | items2dict
+            )
+          }}
+
+    - name: Save new email sent times
+      copy:
+        content: "{{ new_email_sent_times | to_json | b64encode }}"
+        dest: /etc/ansible/facts.d/ntp_email_sent_times.json
+      when: hosts_to_notify | length > 0
