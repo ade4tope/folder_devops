@@ -259,3 +259,335 @@
         content: "{{ new_email_sent_times | to_json | b64encode }}"
         dest: /etc/ansible/facts.d/ntp_email_sent_times.json
       when: hosts_to_notify | length > 0
+
+
+
+
+---
+- name: shell script to get ntp offset
+  become: yes 
+  changeg_when: false 
+  ansible.builtin.shell: /usr/sbin/chronyd -Q -5 'server {{ip_add}}'
+  register: ntpoffset 
+
+- name: get hostname from ip
+  ansible.builtin.set_fact: 
+    hostname: "{{ lookup('community.general.dig', ip_add qtype='PTR')}}"
+
+- name: set dates
+  ansible.builtin.shell: date
+    resgister: time
+
+- name: set fact for final object
+  ansible.builtin.set_fact:
+    final_object:
+      date: "{{time.stdout}}"
+      item.get_ntpoffset: "{{ntpoffset.stdout}}"
+      get_hostname: "{{hostname}}"
+      ip_add: "{{ip_add}}"
+
+
+- name: set dates
+  ansible.builtin.set_fact: 
+    final_list: "{{final_list | default ([]) + [final_object]}}"
+
+
+- name: Check NTP time skew and send report
+  hosts: 1.2.3.4.5
+  gather_facts: no
+  become: true
+  vars:
+    specified_host: 1.2.3.4.5
+    images: 
+      - 2.3.4.5.6
+    server_ip:
+      - 3.4.5.6.7
+
+  tasks:
+    - name: get host ip
+      ansible.builtin.set_fact:
+        dig_list: "{{ dig_list | default([]) + query('community.general.dig', item)}}"
+      loop: "{{images}}"
+
+    - name: import object.yaml
+      ansible.builtin.include_tasks: object.yaml
+      loop: "{{dig_list + server_ip}}"
+      loop_control:
+        loop_var: ip_add
+
+    - name: set fact time skew
+      ansible.builtin.set_fact:
+        final_skew: "{{ final_list | json_query('[*].get_ntpoffset') }}"
+
+    - name: add item to alert_items
+      ansible.builtin.set_fact:
+        alert_items: "{{ alert_items | default([]) + [ item ] )}}"
+      with_items: "{{final_skew}}"
+      when: (item | float) >= 0.5 or (item | float) <= -0.5
+    
+    - name: collect gather
+      delegated_to: specified_host
+      run_once: true
+      ansible.builtin.setup:
+        gather_subset:
+          - '!all'
+          - date_time 
+
+    - name: sect fact for test body
+      ansible.builtin.set_fact:
+        ntp_offset_report:
+          <html>
+          <head>
+          <tr>
+          <th> Date </th> <th> NTP Offset </th> <th> Hostname </th> <th> IP Address </th>
+          </tr>
+          </head>
+          <body>
+          <tr>
+          {% for item in final_list %}
+          <td> {{item.date}} </td> <td> {{item.get_offset}} </td> <td> {{item.get_hostname}} </td> <td> {{item.ip_add}} </td>
+          </tr>
+          {% endfor %}
+          </body>
+          </table>
+          </html>
+        dig_list: "{{ dig_list | default([]) + query('community.general.dig', item)}}"
+      loop: "{{images}}"
+
+    - name: creat log file 
+      community.general.blockinfile:
+        create: true
+        path: /opt/example.html
+        owner: root
+        user: root
+        mode: 0555
+        marker: ""
+        block: "{{ntp_offset_report}}"
+
+    - name: Send email 
+      ansible.builtin.set_fact:
+        chrony_time_difference: |
+          <p><strong> ======== Chrony Report ============</strong></p>
+          {% for item in final_list -%}
+            {% if item.get_ntpoffset | float >= 0.5 or item.get_ntpoffse | float <= 0.5 %}
+            <strong> {{item.get_hostname}} {{item.ip_add}} {{item.get_ntpoffset }} was greater tahn 0.5 secs </strong>
+          {% endif %}
+          {% endfor %}
+      when: alert_items is defined
+
+    - name: Send email with HTML report if there are any time skews outside the 0.5s range
+      community.general.mail:
+        host: smtp.your.mailserver.com
+        port: 587
+        username: your_username
+        password: your_password
+        to: recipient@example.com
+        subject: "NTP Time Skew Report"
+        body: "{{chrony_time_difference}}"
+        subtype: html
+
+
+
+
+
+
+---
+- name: shell script to get ntp offset
+  become: yes
+  changeg_when: false
+  ansible.builtin.shell: /usr/sbin/chronyd -Q -5 'server {{ip_add}}'
+  register: ntpoffset
+
+- name: get hostname from ip
+  ansible.builtin.set_fact:
+    hostname: "{{ lookup('community.general.dig', ip_add, qtype='PTR')}}"
+
+- name: set dates
+  ansible.builtin.shell: date
+  register: time
+
+- name: set fact for final object
+  ansible.builtin.set_fact:
+    final_object:
+      date: "{{ time.stdout }}"
+      ntp_offset: "{{ ntpoffset.stdout }}"
+      hostname: "{{ hostname }}"
+      ip_add: "{{ ip_add }}"
+
+- name: set dates
+  ansible.builtin.set_fact:
+    final_list: "{{ final_list | default([]) + [final_object] }}"
+
+- name: Check NTP time skew and send report
+  hosts: all
+  gather_facts: no
+  become: true
+  vars:
+    specified_host: 1.2.3.4.5
+    images:
+      - 2.3.4.5.6
+    server_ip:
+      - 3.4.5.6.7
+    email_threshold_minutes: 20
+
+  tasks:
+    - name: get host ip
+      ansible.builtin.set_fact:
+        dig_list: "{{ dig_list | default([]) + query('community.general.dig', item) }}"
+      loop: "{{ images }}"
+
+    - name: import object.yaml
+      ansible.builtin.include_tasks: object.yaml
+      loop: "{{ dig_list + server_ip }}"
+      loop_control:
+        loop_var: ip_add
+
+    - name: set fact time skew
+      ansible.builtin.set_fact:
+        final_skew: "{{ final_list | json_query('[*].ntp_offset') }}"
+
+    - name: Add host to alert_items if skew is outside the threshold
+      ansible.builtin.set_fact:
+        alert_items: "{{ alert_items | default([]) + [ item ] }}"
+      with_items: "{{ final_list }}"
+      when: (item.ntp_offset | float) >= 0.5 or (item.ntp_offset | float) <= -0.5
+
+    - name: Calculate last email sent time for each host
+      ansible.builtin.set_fact:
+        last_email_sent_time: "{{ hostvars[item.ip_add]['last_email_sent_time'] | default(0) }}"
+      with_items: "{{ final_list }}"
+      loop_control:
+        loop_var: item
+
+    - name: Send email if skew is outside the threshold and time since last email is greater than threshold
+      ansible.builtin.set_fact:
+        chrony_time_difference: |
+          <p><strong> ======== Chrony Report ============</strong></p>
+          {% for item in final_list %}
+            {% if (item.ntp_offset | float) >= 0.5 or (item.ntp_offset | float) <= -0.5 %}
+              <strong> {{ item.hostname }} {{ item.ip_add }} {{ item.ntp_offset }} was greater than 0.5 secs </strong>
+            {% endif %}
+          {% endfor %}
+      when: alert_items is defined and (ansible_date_time.epoch|int - last_email_sent_time) > (email_threshold_minutes * 60)
+
+    - name: Send email with HTML report if there are any time skews outside the 0.5s range
+      community.general.mail:
+        host: smtp.your.mailserver.com
+        port: 587
+        username: your_username
+        password: your_password
+        to: recipient@example.com
+        subject: "NTP Time Skew Report"
+        body: "{{ chrony_time_difference }}"
+        subtype: html
+
+    - name: Update last email sent time for each host
+      ansible.builtin.set_fact:
+        hostvars[item.ip_add]['last_email_sent_time']: "{{ ansible_date_time.epoch|int }}"
+      with_items: "{{ final_list }}"
+
+
+---
+- name: shell script to get ntp offset
+  become: yes 
+  changed_when: false 
+  ansible.builtin.shell: /usr/sbin/chronyd -Q -5 'server {{ip_add}}'
+  register: ntpoffset 
+
+- name: get hostname from ip
+  ansible.builtin.set_fact: 
+    hostname: "{{ lookup('community.general.dig', ip_add qtype='PTR')}}"
+
+- name: set dates
+  ansible.builtin.shell: date
+  register: time
+
+- name: set fact for final object
+  ansible.builtin.set_fact:
+    final_object:
+      date: "{{ time.stdout }}"
+      get_ntpoffset: "{{ ntpoffset.stdout }}"
+      get_hostname: "{{ hostname }}"
+      ip_add: "{{ ip_add }}"
+
+- name: set fact for final list
+  ansible.builtin.set_fact: 
+    final_list: "{{ final_list | default([]) + [final_object] }}"
+
+- name: Check NTP time skew and send report
+  hosts: 1.2.3.4.5
+  gather_facts: no
+  become: true
+  vars:
+    specified_host: 1.2.3.4.5
+    images: 
+      - 2.3.4.5.6
+    server_ip:
+      - 3.4.5.6.7
+    email_interval: 1200  # 20 minutes in seconds
+
+  tasks:
+    - name: get host ip
+      ansible.builtin.set_fact:
+        dig_list: "{{ dig_list | default([]) + query('community.general.dig', item) }}"
+      loop: "{{ images }}"
+
+    - name: import object.yaml
+      ansible.builtin.include_tasks: object.yaml
+      loop: "{{ dig_list + server_ip }}"
+      loop_control:
+        loop_var: ip_add
+
+    - name: add item to alert_items
+      ansible.builtin.set_fact:
+        alert_items: "{{ alert_items | default([]) + [ item ] }}"
+      with_items: "{{ final_list }}"
+    
+    - name: collect gather
+      delegated_to: specified_host
+      run_once: true
+      ansible.builtin.setup:
+        gather_subset:
+          - '!all'
+          - date_time 
+
+    - name: set fact for ntp offset report
+      ansible.builtin.set_fact:
+        ntp_offset_report: |
+          <html>
+          <head>
+          <tr>
+          <th> Date </th> <th> NTP Offset </th> <th> Hostname </th> <th> IP Address </th>
+          </tr>
+          </head>
+          <body>
+          <tr>
+          {% for item in final_list %}
+          <td> {{ item.date }} </td> <td> {{ item.get_ntpoffset }} </td> <td> {{ item.get_hostname }} </td> <td> {{ item.ip_add }} </td>
+          </tr>
+          {% endfor %}
+          </body>
+          </table>
+          </html>
+        dig_list: "{{ dig_list | default([]) + query('community.general.dig', item) }}"
+      loop: "{{ images }}"
+
+    - name: create log file 
+      community.general.blockinfile:
+        create: true
+        path: /opt/example.html
+        owner: root
+        group: root
+        mode: '0555'
+        marker: ""
+        block: "{{ ntp_offset_report }}"
+
+    - name: initialize last_email_sent fact if not defined
+      ansible.builtin.set_fact:
+        last_email_sent: {}
+      when: last_email_sent is not defined
+
+    - name: check and set email times for each host
+      ansible.builtin.set_fact:
+        send_email: "{{ send_email | default({}) | combine({item.get_hostname: (ntp_offset_time - last_email_sent.get(item.get_hostname, 0)) >= email_interval}) }}"
+        last_email_sent: "{{ last_email_sent | combine({item.get
