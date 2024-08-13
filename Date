@@ -65,3 +65,20 @@ You're correct that there's an error due to a missing quote in the initial task 
 - **date_parts:** Splits the date string into `["Aug", "6", "2024"]`.
 
 This task should now work without any syntax errors and will format "Aug 6 2024" to "2024-08-06".
+
+
+
+
+---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    original_dates: ["August 8, 2024", "July 6, 2025"]
+  tasks:
+    - name: Convert list of dates to YYYY-MM-DD format
+      set_fact:
+        formatted_dates: "{{ original_dates | map('regex_replace', '^(.+)$', '\\1') | map('to_datetime', '%B %d, %Y') | map('strftime', '%Y-%m-%d') | list }}"
+        
+    - name: Display the converted dates
+      debug:
+        var: formatted_dates
