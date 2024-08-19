@@ -260,6 +260,203 @@ sudo systemctl status httpd
   sudo tar -czvf /backup/www_backup_$(date +%F).tar.gz /var/www/html/
   ```
 
+
+
+
+
+### **HTTPD Runbook for RHEL 8: Post-Disaster Recovery Setup**
+
+#### **1. Introduction**
+- **Purpose:** Guide to restore and reconfigure the Apache HTTPD server on RHEL 8 after a disaster recovery event.
+- **Audience:** System Administrators, DevOps Engineers, IT Operations.
+- **Scope:** This runbook assumes that the server has been restored to a basic operational state (OS is functional) and focuses on restoring and reconfiguring the HTTPD service.
+
+---
+
+#### **2. Prerequisites**
+
+##### **2.1. System Prerequisites**
+- **Operating System:** RHEL 8
+- **Permissions:** Ensure root or sudo access.
+- **Network Configuration:** Verify that the network is functional and that necessary ports (80 for HTTP, 443 for HTTPS) are open.
+- **Backup Availability:** Confirm access to the latest backup files for HTTPD configuration, web content, and SSL certificates.
+
+##### **2.2. Tools and Software**
+- **HTTPD Package:** Ensure the `httpd` package is available for installation.
+- **Firewall and SELinux:** Ensure `firewalld` and SELinux are configured properly.
+- **Backup Software:** Access to backup software or storage where backups are located.
+
+---
+
+#### **3. Recovery Steps**
+
+##### **3.1. Verify the System**
+- **Check System Health:**
+  - Verify the system's current state (e.g., disk space, memory, CPU).
+    ```bash
+    df -h
+    free -m
+    uptime
+    ```
+  - Check network connectivity.
+    ```bash
+    ping google.com
+    ```
+
+##### **3.2. Reinstall HTTPD**
+- **Update System Packages:**
+  ```bash
+  sudo yum update -y
+  ```
+- **Install HTTPD:**
+  ```bash
+  sudo yum install httpd -y
+  ```
+- **Verify Installation:**
+  ```bash
+  httpd -v
+  ```
+
+##### **3.3. Restore HTTPD Configuration**
+- **Restore Configuration Files from Backup:**
+  - Assuming the backup file is available at `/backup/httpd_conf_backup.tar.gz`:
+    ```bash
+    sudo tar -xzvf /backup/httpd_conf_backup.tar.gz -C /
+    ```
+  - Ensure all configurations are restored to `/etc/httpd/`.
+
+- **Check Configuration Integrity:**
+  - After restoring, verify the integrity of the configuration:
+    ```bash
+    sudo apachectl configtest
+    ```
+  - Address any errors or warnings.
+
+##### **3.4. Restore Web Content**
+- **Restore Web Files from Backup:**
+  - Assuming the backup file is available at `/backup/www_backup.tar.gz`:
+    ```bash
+    sudo tar -xzvf /backup/www_backup.tar.gz -C /
+    ```
+  - Ensure all web content is restored to `/var/www/html/`.
+
+##### **3.5. Restore SSL Certificates (if applicable)**
+- **Restore SSL Certificates:**
+  - Ensure that SSL certificates and keys are restored to their appropriate locations, typically:
+    - Certificates: `/etc/pki/tls/certs/`
+    - Private Keys: `/etc/pki/tls/private/`
+  
+- **Verify SSL Configuration:**
+  - Confirm that SSL settings in `/etc/httpd/conf.d/ssl.conf` or your virtual host configurations point to the correct files.
+
+##### **3.6. Reconfigure SELinux (if applicable)**
+- **Reapply SELinux Policies:**
+  - If SELinux is enforcing, reapply necessary policies:
+    ```bash
+    sudo setsebool -P httpd_can_network_connect 1
+    sudo restorecon -Rv /var/www/html/
+    ```
+
+##### **3.7. Reconfigure Firewall**
+- **Reapply Firewall Rules:**
+  - Allow HTTP and HTTPS traffic:
+    ```bash
+    sudo firewall-cmd --permanent --add-service=http
+    sudo firewall-cmd --permanent --add-service=https
+    sudo firewall-cmd --reload
+    ```
+
+---
+
+#### **4. Testing**
+
+##### **4.1. Start and Enable HTTPD**
+- **Start the HTTPD Service:**
+  ```bash
+  sudo systemctl start httpd
+  ```
+- **Enable HTTPD to Start on Boot:**
+  ```bash
+  sudo systemctl enable httpd
+  ```
+
+##### **4.2. Verify Web Server Functionality**
+- **Check Service Status:**
+  ```bash
+  sudo systemctl status httpd
+  ```
+- **Test Access to the Website:**
+  - Use a browser or `curl` to test:
+    ```bash
+    curl -I http://localhost
+    curl -I https://localhost
+    ```
+  - Ensure the website is accessible and functioning as expected.
+
+##### **4.3. Verify Logs**
+- **Check Access and Error Logs:**
+  ```bash
+  tail -f /var/log/httpd/access_log
+  tail -f /var/log/httpd/error_log
+  ```
+- Look for any anomalies or errors during startup and access.
+
+---
+
+#### **5. Security Hardening**
+
+##### **5.1. Review Security Settings**
+- **Disable Directory Listing:**
+  - In the configuration files:
+    ```apache
+    <Directory /var/www/html>
+        Options -Indexes
+    </Directory>
+    ```
+
+##### **5.2. Update and Patch**
+- **Apply Latest Security Updates:**
+  ```bash
+  sudo yum update -y
+  ```
+
+---
+
+#### **6. Monitoring and Maintenance**
+
+##### **6.1. Set Up Regular Backups**
+- **Schedule Backups for Configuration Files:**
+  - Use `cron` or a backup tool to schedule regular backups of `/etc/httpd/` and `/var/www/html/`.
+
+##### **6.2. Monitor HTTPD**
+- **Configure Monitoring Tools:**
+  - Set up monitoring for HTTPD using tools like `Nagios`, `Prometheus`, or `Zabbix`.
+  
+##### **6.3. Log Review**
+- **Set Up Log Rotation:**
+  - Ensure `logrotate` is configured for HTTPD logs to avoid disk space issues:
+    - Configuration typically found in `/etc/logrotate.d/httpd`.
+
+---
+
+#### **7. Documentation and Reporting**
+
+##### **7.1. Document Recovery Process**
+- **Record any deviations or specific issues encountered during the recovery.**
+
+##### **7.2. Report**
+- **Create a report for stakeholders summarizing the recovery process, current system status, and any action items.**
+
+---
+
+#### **8. Conclusion**
+- **Post-Recovery Review:** Conduct a post-recovery review to identify any potential issues or improvements for future disaster recovery scenarios.
+- **Plan for Future:** Update your disaster recovery plan based on lessons learned from the recovery process.
+
+---
+
+This runbook should be tailored to your organization's specific environment and requirements, ensuring that all steps align with your disaster recovery strategy.
+
 ---
 
 #### **10. Conclusion**
