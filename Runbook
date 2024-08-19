@@ -1,0 +1,272 @@
+Below is a detailed runbook specifically tailored for managing HTTPD (Apache HTTP Server) on Red Hat Enterprise Linux (RHEL) servers:
+
+---
+
+### **HTTPD Runbook for Red Hat Servers**
+
+#### **1. Introduction**
+- **Purpose:** Provide a comprehensive guide for the installation, configuration, management, and troubleshooting of the Apache HTTPD server on Red Hat Enterprise Linux (RHEL).
+- **Audience:** System Administrators, DevOps Engineers, IT Operations.
+
+---
+
+#### **2. Prerequisites**
+- **Operating System:** Red Hat Enterprise Linux (RHEL) 7/8/9.
+- **Permissions:** Root or sudo privileges are required.
+- **Network Configuration:** Ensure that the necessary ports (e.g., 80 for HTTP and 443 for HTTPS) are open in the firewall.
+- **Dependencies:** Ensure that any required software dependencies (e.g., OpenSSL, PHP, SELinux) are installed and properly configured.
+
+---
+
+#### **3. Installation**
+
+##### **3.1. Update System Packages**
+```bash
+sudo yum update -y
+```
+
+##### **3.2. Install HTTPD**
+```bash
+sudo yum install httpd -y
+```
+
+##### **3.3. Verify Installation**
+- Check the installed HTTPD version:
+  ```bash
+  httpd -v
+  ```
+- Verify the HTTPD service status:
+  ```bash
+  sudo systemctl status httpd
+  ```
+
+---
+
+#### **4. Configuration**
+
+##### **4.1. Main Configuration File**
+- **File Location:** `/etc/httpd/conf/httpd.conf`
+- **Common Configurations:**
+  - **ServerName:** Define the server's hostname.
+    ```apache
+    ServerName www.example.com
+    ```
+  - **DocumentRoot:** Define the root directory for the server's web files.
+    ```apache
+    DocumentRoot "/var/www/html"
+    ```
+  - **Directory Permissions:** Set permissions for the web directory.
+    ```apache
+    <Directory "/var/www/html">
+        Options Indexes FollowSymLinks
+        AllowOverride None
+        Require all granted
+    </Directory>
+    ```
+  - **Load Modules:** Ensure necessary modules (e.g., `mod_ssl`, `mod_rewrite`) are loaded.
+
+##### **4.2. Virtual Hosts**
+- **Configuration File Location:** `/etc/httpd/conf.d/vhost.conf`
+- **Example Configuration:**
+  ```apache
+  <VirtualHost *:80>
+      ServerAdmin admin@example.com
+      ServerName www.example.com
+      DocumentRoot /var/www/html/example.com
+      ErrorLog /var/log/httpd/example.com-error.log
+      CustomLog /var/log/httpd/example.com-access.log combined
+  </VirtualHost>
+  ```
+
+##### **4.3. SSL Configuration**
+- **Install OpenSSL and mod_ssl:**
+  ```bash
+  sudo yum install mod_ssl openssl -y
+  ```
+- **Generate a Self-Signed Certificate:**
+  ```bash
+  sudo openssl req -newkey rsa:2048 -nodes -keyout /etc/pki/tls/private/server.key -x509 -days 365 -out /etc/pki/tls/certs/server.crt
+  ```
+- **SSL Virtual Host Configuration:**
+  ```apache
+  <VirtualHost *:443>
+      ServerAdmin admin@example.com
+      ServerName www.example.com
+      DocumentRoot /var/www/html/example.com
+      SSLEngine on
+      SSLCertificateFile /etc/pki/tls/certs/server.crt
+      SSLCertificateKeyFile /etc/pki/tls/private/server.key
+  </VirtualHost>
+  ```
+
+##### **4.4. SELinux Configuration (if enabled)**
+- Ensure HTTPD is allowed to bind to specific ports:
+  ```bash
+  sudo semanage port -a -t http_port_t -p tcp 8080  # Example for port 8080
+  ```
+- Allow HTTPD to serve content over SSL:
+  ```bash
+  sudo setsebool -P httpd_can_network_connect 1
+  ```
+
+---
+
+#### **5. Management**
+
+##### **5.1. Start/Stop/Restart HTTPD**
+```bash
+sudo systemctl start httpd
+sudo systemctl stop httpd
+sudo systemctl restart httpd
+```
+
+##### **5.2. Enable HTTPD to Start on Boot**
+```bash
+sudo systemctl enable httpd
+```
+
+##### **5.3. Reload Configuration without Restarting**
+```bash
+sudo systemctl reload httpd
+```
+
+##### **5.4. Check HTTPD Service Status**
+```bash
+sudo systemctl status httpd
+```
+
+---
+
+#### **6. Monitoring and Logs**
+
+##### **6.1. Access Logs**
+- **Location:** `/var/log/httpd/access_log`
+- **Example Command:**
+  ```bash
+  tail -f /var/log/httpd/access_log
+  ```
+
+##### **6.2. Error Logs**
+- **Location:** `/var/log/httpd/error_log`
+- **Example Command:**
+  ```bash
+  tail -f /var/log/httpd/error_log
+  ```
+
+##### **6.3. Monitoring HTTPD Performance**
+- **Using `apachetop` (if installed):**
+  ```bash
+  sudo yum install apachetop -y
+  apachetop
+  ```
+- **Using `htop` to monitor system resources:**
+  ```bash
+  sudo yum install htop -y
+  htop
+  ```
+
+---
+
+#### **7. Security**
+
+##### **7.1. Basic Security Hardening**
+- **Disable Directory Listing:**
+  ```apache
+  <Directory /var/www/html>
+      Options -Indexes
+  </Directory>
+  ```
+- **Restrict HTTP Methods:**
+  ```apache
+  <Directory "/var/www/html">
+      <LimitExcept GET POST>
+          deny from all
+      </LimitExcept>
+  </Directory>
+  ```
+- **Hide Apache Version and OS Details:**
+  - Edit the `httpd.conf` file:
+    ```apache
+    ServerTokens Prod
+    ServerSignature Off
+    ```
+
+##### **7.2. Enable Firewall Rules**
+- **Allow HTTP and HTTPS Traffic:**
+  ```bash
+  sudo firewall-cmd --permanent --add-service=http
+  sudo firewall-cmd --permanent --add-service=https
+  sudo firewall-cmd --reload
+  ```
+
+##### **7.3. SELinux Configuration**
+- If SELinux is enforcing, ensure HTTPD has the necessary permissions:
+  ```bash
+  sudo setsebool -P httpd_can_network_connect 1
+  sudo setsebool -P httpd_read_user_content 1
+  ```
+
+---
+
+#### **8. Troubleshooting**
+
+##### **8.1. Common Issues**
+
+- **Port Conflict:**
+  - **Symptom:** HTTPD fails to start due to a port conflict.
+  - **Solution:** Identify the conflicting service using:
+    ```bash
+    sudo netstat -tuln | grep :80
+    ```
+    Stop the conflicting service or change the HTTPD port in `/etc/httpd/conf/httpd.conf`.
+
+- **Permission Denied:**
+  - **Symptom:** Error logs show "Permission denied."
+  - **Solution:** Check the directory and file permissions, and ensure the `apache` user has the correct access.
+
+- **SELinux Related Issues:**
+  - **Symptom:** HTTPD cannot access certain files or ports.
+  - **Solution:** Use `audit2why` and `audit2allow` to diagnose and fix SELinux denials.
+    ```bash
+    sudo ausearch -m avc -ts today | audit2allow -m my-httpd > httpd.te
+    sudo semodule -i httpd.pp
+    ```
+
+##### **8.2. Testing Configuration**
+- **Test the HTTPD Configuration for Errors:**
+  ```bash
+  sudo apachectl configtest
+  ```
+
+---
+
+#### **9. Backup and Recovery**
+
+##### **9.1. Backup HTTPD Configuration**
+- **Backup Config Files:**
+  ```bash
+  sudo tar -czvf /backup/httpd_conf_backup_$(date +%F).tar.gz /etc/httpd/
+  ```
+
+##### **9.2. Restore Configuration**
+- **Restore Config Files from Backup:**
+  ```bash
+  sudo tar -xzvf /backup/httpd_conf_backup.tar.gz -C /etc/httpd/
+  ```
+
+##### **9.3. Backup Web Content**
+- **Backup Web Files:**
+  ```bash
+  sudo tar -czvf /backup/www_backup_$(date +%F).tar.gz /var/www/html/
+  ```
+
+---
+
+#### **10. Conclusion**
+- **Review the HTTPD documentation:** [Apache HTTPD Documentation](https://httpd.apache.org/docs/)
+- **Regular Maintenance:** Schedule regular backups, log reviews, and security audits.
+- **Automate Repetitive Tasks:** Use automation tools like Ansible for configuration management and deployment.
+
+---
+
+This runbook can be further customized based on the specific requirements and configurations of your Red Hat environment.
