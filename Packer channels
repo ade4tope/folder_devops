@@ -1,0 +1,80 @@
+hcp_packer_registry {
+  bucket_name = "my-vsphere-bucket"
+  bucket_id   = "bucket-id-from-hcp"
+  hash        = "${data.vsphere_template.template.id}"
+}
+
+hcp_packer_artifact {
+  cloud_provider = "vsphere"
+  region         = "datacenter1"   # Replace with your logical datacenter or environment
+  build_version  = "1.0.0"         # Your build version
+}
+
+hcp_packer_channel {
+  name         = "production"      # Assigning this image to the production channel
+  artifact_id  = "${hcp_packer_artifact.artifact_id}"
+}
+
+
+
+
+# Providers
+provider "vsphere" {
+  vsphere_server = "your-vsphere-server"
+  user           = "your-vsphere-username"
+  password       = "your-vsphere-password"
+  allow_unverified_ssl = true
+}
+
+# Data block to retrieve HCP Packer artifact
+data "hcp_packer_iteration" "linux_vm" {
+  bucket_name = "my-vsphere-bucket"
+  channel     = "production"
+  cloud_provider = "vsphere"
+}
+
+# Data block to fetch vsphere template from HCP Packer iteration
+data "vsphere_virtual_machine" "template" {
+  name = data.hcp_packer_iteration.linux_vm.metadata.image_name
+  datacenter_id = "your-datacenter-id"  # Replace with your datacenter ID
+}
+
+# Resource to deploy the VM
+resource "vsphere_virtual_machine" "linux_vm" {
+  name             = "my-linux-vm"
+  resource_pool_id = "your-resource-pool-id"   # Replace with your resource pool
+  datastore_id     = "your-datastore-id"       # Replace with your datastore
+
+  num_cpus = 2
+  memory   = 2048
+  guest_id = "otherGuest64"  # Generic Linux guest OS identifier
+
+  network_interface {
+    network_id   = "your-network-id"           # Replace with your network
+    adapter_type = "vmxnet3"
+  }
+
+  disk {
+    label            = "disk0"
+    size             = 20
+    thin_provisioned = true
+  }
+
+  clone {
+    template_uuid = data.vsphere_virtual_machine.template.id
+
+    customize {
+      linux_options {
+        host_name = "my-linux-vm"
+        domain    = "example.com"
+      }
+
+      network_interface {
+        ipv4_address = "192.168.1.100"         # Assign the appropriate IP
+        ipv4_netmask = 24
+      }
+
+      ipv4_gateway = "192.168.1.1"
+    }
+  }
+}
